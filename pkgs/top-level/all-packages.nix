@@ -19437,6 +19437,8 @@ with pkgs;
 
   libvirt = callPackage ../development/libraries/libvirt {
     inherit (darwin.apple_sdk.frameworks) Carbon AppKit;
+    # polkit depends on spidermonkey which is broken on macOS
+    polkit = if stdenv.isDarwin then null else polkit;
   };
 
   libvirt-glib = callPackage ../development/libraries/libvirt-glib { };

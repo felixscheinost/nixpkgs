@@ -26,7 +26,6 @@
 , ninja
 , perl
 , perlPackages
-, polkit
 , pkg-config
 , pmutils
 , python3
@@ -74,6 +73,7 @@
 , xen ? null
 , enableZfs ? stdenv.isLinux
 , zfs ? null
+, polkit ? null
 }:
 
 with lib;
@@ -123,6 +123,7 @@ stdenv.mkDerivation rec {
 
   patches = [
     ./0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
+    ./0002-meson-patch-vircryptotest-so-that-is-works-on-macOS.patch
   ];
 
   # remove some broken tests
@@ -219,8 +220,14 @@ stdenv.mkDerivation rec {
         --replace "gmake" "make" \
         --replace "ggrep" "grep"
 
-      substituteInPlace src/util/virpolkit.h \
-        --replace '"/usr/bin/pkttyagent"' '"${polkit.bin}/bin/pkttyagent"'
+      ${
+        if polkit != null then ''
+          substituteInPlace src/util/virpolkit.h \
+            --replace '"/usr/bin/pkttyagent"' '"${polkit.bin}/bin/pkttyagent"'
+        ''
+        else ""
+      }
+
 
       patchShebangs .
     ''
@@ -266,7 +273,7 @@ stdenv.mkDerivation rec {
       (feat "numactl" isLinux)
       (feat "numad" isLinux)
       (feat "pciaccess" isLinux)
-      (feat "polkit" true)
+      (feat "polkit" (polkit != null))
       (feat "readline" true)
       (feat "secdriver_apparmor" isLinux)
       (feat "tests" true)

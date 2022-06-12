@@ -1,0 +1,37 @@
+From c938641eea9a2e9b259e82fea495b81cb39448ab Mon Sep 17 00:00:00 2001
+From: Felix Scheinost <felix.scheinost@posteo.de>
+Date: Thu, 16 Jun 2022 09:41:28 +0200
+Subject: [PATCH] meson: patch `vircryptotest` so that is works on macOS
+
+---
+ tests/vircryptotest.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/tests/vircryptotest.c b/tests/vircryptotest.c
+index 9fbaf2f636..0dddd90427 100644
+--- a/tests/vircryptotest.c
++++ b/tests/vircryptotest.c
+@@ -76,11 +76,15 @@ testCryptoEncrypt(const void *opaque)
+     enckey = g_new0(uint8_t, enckeylen);
+     iv = g_new0(uint8_t, ivlen);
+ 
+-    if (virRandomBytes(enckey, enckeylen) < 0 ||
+-        virRandomBytes(iv, ivlen) < 0) {
+-        fprintf(stderr, "Failed to generate random bytes\n");
+-        return -1;
+-    }
++    // nixpkgs macOS fix.
++    // Upstream uses `virRandomBytes` here which is mocked in `virrandommock.c`.
++    // But somehow this mocking does only work partially on macOS. (See https://gitlab.com/libvirt/libvirt/-/issues/328)
++    // So for nixpkgs we inlined the call to the mocked virRandomBytes here.
++    size_t i;
++    for (i = 0; i < enckeylen; i++)
++        enckey[i] = i;
++    for (i = 0; i < ivlen; i++)
++        iv[i] = i;
+ 
+     if (virCryptoEncryptData(data->algorithm, enckey, enckeylen, iv, ivlen,
+                              data->input, data->inputlen,
+-- 
+2.32.0 (Apple Git-132)
+
