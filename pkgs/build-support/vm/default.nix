@@ -1,5 +1,14 @@
 { lib
+
+# pkgs used inside the VM
 , pkgs
+
+# pkgs used outside the VM
+# (similar to NixOS's `virtualisation.host.pkgs` option)
+# using over `buildPackages` as currently `nix-build -E '(import <nixpkgs> { }).pkgsCross.aarch64-multiplatform.buildPackages.qemu_kvm'`
+# fails on aarch64-darwin with `error: Don't know how to run aarch64-unknown-linux-gnu executables.`
+, hostPkgs ? pkgs.buildPackages
+
 , customQemu ? null
 , kernel ? pkgs.linux
 , img ? pkgs.stdenv.hostPlatform.linux-kernel.target
@@ -12,12 +21,15 @@
 let
   inherit (pkgs) bash bashInteractive busybox cpio coreutils e2fsprogs fetchurl kmod rpm
     stdenv util-linux
-    buildPackages writeScript writeText runCommand;
+    buildPackages writeScript runCommand;
 in
 rec {
   qemu-common = import ../../../nixos/lib/qemu-common.nix { inherit lib pkgs; };
 
-  qemu = buildPackages.qemu_kvm;
+  qemu = hostPkgs.qemu_kvm;
+
+  # export hostPkgs so that downstream tools that wrap around e.g. runInLinuxVM can use it
+  inherit hostPkgs;
 
   modulesClosure = pkgs.makeModulesClosure {
     inherit kernel rootModules;
@@ -232,10 +244,10 @@ rec {
   '';
 
 
-  vmRunCommand = qemuCommand: writeText "vm-run" ''
+  vmRunCommand = qemuCommand: hostPkgs.writeText "vm-run" ''
     export > saved-env
 
-    PATH=${coreutils}/bin
+    PATH=${hostPkgs.coreutils}/bin
     mkdir xchg
     mv saved-env xchg/
 
@@ -253,7 +265,7 @@ rec {
     # debug inside the VM if the build fails (when Nix is called with
     # the -K option to preserve the temporary build directory).
     cat > ./run-vm <<EOF
-    #! ${bash}/bin/sh
+    #! ${hostPkgs.bash}/bin/sh
     ''${diskImage:+diskImage=$diskImage}
     TMPDIR=$TMPDIR
     cd $TMPDIR
@@ -334,8 +346,9 @@ rec {
      that allows you to boot into the VM and debug it interactively. */
 
   runInLinuxVM = drv: lib.overrideDerivation drv ({ memSize ? 512, QEMU_OPTS ? "", args, builder, ... }: {
-    requiredSystemFeatures = [ "kvm" ];
-    builder = "${bash}/bin/sh";
+    system = hostPkgs.system;
+    requiredSystemFeatures = if !hostPkgs.stdenv.isDarwin then [ "kvm" ] else [];
+    builder = "${hostPkgs.bash}/bin/sh";
     args = ["-e" (vmRunCommand qemuCommandLinux)];
     origArgs = args;
     origBuilder = builder;
